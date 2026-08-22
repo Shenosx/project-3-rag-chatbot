@@ -40,12 +40,28 @@ export default function DocumentsPage() {
         throw new Error(processData.error || "Document processing failed");
       }
       
+      const embedResponse = await fetch("/api/embed", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          documentId: data.document.id,
+        }),
+      });
+      
+      const embedData = await embedResponse.json();
+      
+      if (!embedResponse.ok) {
+        throw new Error(embedData.error || "Embedding generation failed");
+      }
+
       setMessage(
         `Uploaded and processed successfully: ${data.document.title} — ${processData.chunkCount} chunks`
       );
 
       setMessage(
-        `Uploaded successfully: ${data.document.title} (ID: ${data.document.id})`
+        `Ready: ${data.document.title} (ID: ${data.document.id}) — ${embedData.embeddedChunks} chunks embedded`
       );
     } catch (error) {
       setMessage(error.message || "Upload failed");

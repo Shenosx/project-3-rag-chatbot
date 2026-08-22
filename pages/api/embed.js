@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { embed } from "../../lib/embedder";
+import { embedMany } from "../../lib/embedder";
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -41,10 +41,16 @@ export default async function handler(req, res) {
       });
     }
 
-    const results = [];
+    const texts = chunks.map((chunk) => chunk.content);
 
-    for (const currentChunk of chunks) {
-      const vector = await embed(currentChunk.content);
+    const embeddings = await embedMany(texts);
+
+    if (embeddings.length !== chunks.length) {
+      throw new Error("Embedding count does not match chunk count");
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+      const vector = embeddings[i];
 
       if (vector.length !== 1536) {
         throw new Error(
@@ -61,19 +67,14 @@ export default async function handler(req, res) {
         WHERE "id" = $2
         `,
         vectorString,
-        currentChunk.id
+        chunks[i].id
       );
-
-      results.push({
-        id: currentChunk.id,
-        dimensions: vector.length,
-      });
     }
 
     return res.status(200).json({
       success: true,
       documentId: id,
-      embeddedChunks: results.length,
+      embeddedChunks: chunks.length,
       dimensions: 1536,
     });
   } catch (error) {

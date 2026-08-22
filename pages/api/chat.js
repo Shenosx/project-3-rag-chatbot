@@ -1,3 +1,4 @@
+import { encodingForModel } from "js-tiktoken";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import Anthropic from "@anthropic-ai/sdk";
@@ -15,6 +16,9 @@ const prisma = new PrismaClient({
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+const encoding = encodingForModel("gpt-4o");
+const MAX_CONTEXT_TOKENS = 6000;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -44,12 +48,26 @@ export default async function handler(req, res) {
     );
 
     // 3. Build context
-    const context = chunks
-      .map(
-        (chunk, index) =>
-          `[Source ${index + 1} | Chunk ${chunk.chunkIndex}]\n${chunk.content}`
-      )
-      .join("\n\n");
+    const contextParts = [];
+    let contextTokens = 0;
+
+    for (let index = 0; index < chunks.length; index++) {
+      const chunk = chunks[index];
+
+      const sourceText =
+        `[Source ${index + 1} | Chunk ${chunk.chunkIndex}]\n${chunk.content}`;
+
+      const tokens = encoding.encode(sourceText).length;
+
+      if (contextTokens + tokens > MAX_CONTEXT_TOKENS) {
+        break;
+      }
+
+      contextParts.push(sourceText);
+      contextTokens += tokens;
+  }
+
+    const context = contextParts.join("\n\n");
 
     // 4. Start SSE response
     res.writeHead(200, {

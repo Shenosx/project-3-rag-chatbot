@@ -43,7 +43,7 @@ export default async function handler(req, res) {
 
     const document = documents[0];
 
-    const textChunks = chunkText(document.content, 500, 50);
+    const textChunks = chunkText(document.content, 500, 100);
 
     if (textChunks.length === 0) {
       return res.status(400).json({
