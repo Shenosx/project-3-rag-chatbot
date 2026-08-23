@@ -1,9 +1,9 @@
 import { encodingForModel } from "js-tiktoken";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import Anthropic from "@anthropic-ai/sdk";
 import { embed } from "../../lib/embedder";
 import { searchSimilarChunks } from "../../lib/vectorSearch";
+import { streamRAGResponse } from "../../lib/claudeRAG";
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -11,10 +11,6 @@ const adapter = new PrismaPg({
 
 const prisma = new PrismaClient({
   adapter,
-});
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 const encoding = encodingForModel("gpt-4o");
@@ -88,30 +84,7 @@ export default async function handler(req, res) {
       )}\n\n`
     );
 
-    // 5. Ask Claude and stream response
-    const stream = anthropic.messages.stream({
-      model: "claude-sonnet-4-6",
-      max_tokens: 800,
-      system: `You are a helpful document assistant.
-
-Answer the user's question using ONLY the provided document context.
-
-Rules:
-- Do not invent information.
-- If the answer is not in the context, say so.
-- Keep the answer concise.
-- When using information from a source, mention [Source 1], [Source 2], etc.
-
-Document context:
-
-${context}`,
-      messages: [
-        {
-          role: "user",
-          content: query,
-        },
-      ],
-    });
+    const stream = await streamRAGResponse(query, context);
 
     stream.on("text", (text) => {
       res.write(
